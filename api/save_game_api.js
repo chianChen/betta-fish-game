@@ -1,4 +1,4 @@
-const { MongoClient } = require('mongodb');
+import { MongoClient } from 'mongodb';
 
 // MongoDB 連接字串 (從環境變數讀取)
 const MONGODB_URI = process.env.MONGODB_URI;
@@ -11,12 +11,15 @@ async function connectToDatabase() {
     return cachedClient;
   }
   
-  const client = await MongoClient.connect(MONGODB_URI);
+  const client = await MongoClient.connect(MONGODB_URI, {
+    useNewUrlParser: true,
+    useUnifiedTopology: true,
+  });
   cachedClient = client;
   return client;
 }
 
-module.exports = async (req, res) => {
+export default async function handler(req, res) {
   // 啟用 CORS
   res.setHeader('Access-Control-Allow-Credentials', true);
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -64,4 +67,4 @@ module.exports = async (req, res) => {
     console.error('Save error:', error);
     res.status(500).json({ error: 'Failed to save game', details: error.message });
   }
-};
+}

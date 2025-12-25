@@ -1,4 +1,4 @@
-const { MongoClient } = require('mongodb');
+import { MongoClient } from 'mongodb';
 
 const MONGODB_URI = process.env.MONGODB_URI;
 const DB_NAME = 'betta_fish_game';
@@ -10,17 +10,20 @@ async function connectToDatabase() {
     return cachedClient;
   }
   
-  const client = await MongoClient.connect(MONGODB_URI);
+  const client = await MongoClient.connect(MONGODB_URI, {
+    useNewUrlParser: true,
+    useUnifiedTopology: true,
+  });
   cachedClient = client;
   return client;
 }
 
-module.exports = async (req, res) => {
+export default async function handler(req, res) {
   // 啟用 CORS
   res.setHeader('Access-Control-Allow-Credentials', true);
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
-  res.setHeader('Access-Control-Allow-Headers', 'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version');
+  res.setHeader('Access-Control-Allow-Headers', 'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-MD5, Content-Type, Date, X-Api-Version');
   
   if (req.method === 'OPTIONS') {
     res.status(200).end();
@@ -65,4 +68,4 @@ module.exports = async (req, res) => {
     console.error('Leaderboard error:', error);
     res.status(500).json({ error: 'Failed to load leaderboard', details: error.message });
   }
-};
+}
