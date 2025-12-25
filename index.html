@@ -35,15 +35,115 @@
           const [showSellMenu, setShowSellMenu] = useState(false);
           const [showContestMenu, setShowContestMenu] = useState(false);
           const [contestResult, setContestResult] = useState(null);
+          const [playerId, setPlayerId] = useState(null);
+          const [saving, setSaving] = useState(false);
+          const [showLeaderboard, setShowLeaderboard] = useState(false);
+          const [leaderboard, setLeaderboard] = useState([]);
 
+          // API 基礎 URL (部署後要改成你的 Vercel URL)
+          const API_URL = window.location.hostname === 'localhost' 
+            ? 'http://localhost:3000/api' 
+            : '/api';
+
+          // 初始化玩家 ID 和載入遊戲
           useEffect(() => {
-            const starter = createFish({
-              colorGenes: ['red', 'red'],
-              finGenes: ['halfmoon', 'veiltail'],
-              sizeGenes: ['medium', 'medium']
-            });
-            setFishes([starter]);
+            let id = localStorage.getItem('playerId');
+            if (!id) {
+              id = 'player_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+              localStorage.setItem('playerId', id);
+            }
+            setPlayerId(id);
+            loadGame(id);
           }, []);
+
+          // 載入遊戲
+          const loadGame = async (id) => {
+            try {
+              const response = await fetch(`${API_URL}/load-game?playerId=${id}`);
+              const data = await response.json();
+              
+              if (data.success && data.gameData) {
+                setFishes(data.gameData.fishes || []);
+                setMoney(data.gameData.money || 1000);
+                setWaterQuality(data.gameData.waterQuality || 100);
+                setTemperature(data.gameData.temperature || 26);
+                console.log('遊戲載入成功！');
+              } else {
+                // 新玩家，建立初始魚
+                const starter = createFish({
+                  colorGenes: ['red', 'red'],
+                  finGenes: ['halfmoon', 'veiltail'],
+                  sizeGenes: ['medium', 'medium']
+                });
+                setFishes([starter]);
+              }
+            } catch (error) {
+              console.log('載入失敗，使用預設資料', error);
+              const starter = createFish({
+                colorGenes: ['red', 'red'],
+                finGenes: ['halfmoon', 'veiltail'],
+                sizeGenes: ['medium', 'medium']
+              });
+              setFishes([starter]);
+            }
+          };
+
+          // 儲存遊戲
+          const saveGame = async () => {
+            if (!playerId || saving) return;
+            
+            setSaving(true);
+            try {
+              const gameData = {
+                fishes,
+                money,
+                waterQuality,
+                temperature
+              };
+
+              const response = await fetch(`${API_URL}/save-game`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  playerId,
+                  gameData
+                })
+              });
+
+              const data = await response.json();
+              if (data.success) {
+                console.log('遊戲已儲存！');
+              }
+            } catch (error) {
+              console.error('儲存失敗:', error);
+            } finally {
+              setSaving(false);
+            }
+          };
+
+          // 自動儲存 (每 30 秒)
+          useEffect(() => {
+            const interval = setInterval(() => {
+              saveGame();
+            }, 30000);
+            return () => clearInterval(interval);
+          }, [fishes, money, waterQuality, temperature, playerId]);
+
+          // 載入排行榜
+          const loadLeaderboard = async () => {
+            try {
+              const response = await fetch(`${API_URL}/leaderboard`);
+              const data = await response.json();
+              if (data.success) {
+                setLeaderboard(data.leaderboard);
+                setShowLeaderboard(true);
+              }
+            } catch (error) {
+              console.error('載入排行榜失敗:', error);
+            }
+          };
 
           useEffect(() => {
             const interval = setInterval(() => {
@@ -413,6 +513,21 @@
                     <Plus />
                     買魚
                   </button>
+                  
+                  <button
+                    onClick={saveGame}
+                    disabled={saving}
+                    className="flex items-center gap-1 px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 text-sm disabled:opacity-50"
+                  >
+                    💾 {saving ? '儲存中...' : '手動儲存'}
+                  </button>
+                  
+                  <button
+                    onClick={loadLeaderboard}
+                    className="flex items-center gap-1 px-3 py-1 bg-indigo-500 text-white rounded hover:bg-indigo-600 text-sm"
+                  >
+                    🏅 排行榜
+                  </button>
                 </div>
               </div>
 
@@ -566,6 +681,51 @@
                     >
                       確定
                     </button>
+                  </div>
+                </div>
+              )}
+
+              {showLeaderboard && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+                  <div className="bg-white rounded-lg p-6 max-w-md w-full">
+                    <div className="flex justify-between items-center mb-4">
+                      <h3 className="text-2xl font-bold">🏅 排行榜</h3>
+                      <button onClick={() => setShowLeaderboard(false)} className="text-2xl">
+                        <X />
+                      </button>
+                    </div>
+                    
+                    <div className="space-y-2 max-h-96 overflow-y-auto">
+                      {leaderboard.map((entry) => (
+                        <div 
+                          key={entry.playerId} 
+                          className={`p-3 rounded flex justify-between items-center ${
+                            entry.playerId === playerId ? 'bg-yellow-100 border-2 border-yellow-400' : 'bg-gray-50'
+                          }`}
+                        >
+                          <div className="flex items-center gap-3">
+                            <span className="text-2xl font-bold text-gray-400">#{entry.rank}</span>
+                            <div>
+                              <div className="font-semibold text-sm">
+                                {entry.playerId === playerId ? '你' : entry.playerId.substring(0, 12)}
+                              </div>
+                              <div className="text-xs text-gray-600">
+                                {entry.fishCount} 條魚
+                              </div>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <div className="text-lg font-bold text-green-600">${entry.money}</div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    
+                    {leaderboard.length === 0 && (
+                      <div className="text-center text-gray-500 py-8">
+                        還沒有排行榜資料
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
