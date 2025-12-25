@@ -1,4 +1,4 @@
-import { MongoClient } from 'mongodb';
+const { MongoClient } = require('mongodb');
 
 const MONGODB_URI = process.env.MONGODB_URI;
 const DB_NAME = 'betta_fish_game';
@@ -10,20 +10,17 @@ async function connectToDatabase() {
     return cachedClient;
   }
   
-  const client = await MongoClient.connect(MONGODB_URI, {
-    useNewUrlParser: true,
-    useUnifiedTopology: true,
-  });
+  const client = await MongoClient.connect(MONGODB_URI);
   cachedClient = client;
   return client;
 }
 
-export default async function handler(req, res) {
+module.exports = async function handler(req, res) {
   // 啟用 CORS
   res.setHeader('Access-Control-Allow-Credentials', true);
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
-  res.setHeader('Access-Control-Allow-Headers', 'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-MD5, Content-Type, Date, X-Api-Version');
+  res.setHeader('Access-Control-Allow-Headers', 'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version');
   
   if (req.method === 'OPTIONS') {
     res.status(200).end();
@@ -39,7 +36,6 @@ export default async function handler(req, res) {
     const db = client.db(DB_NAME);
     const collection = db.collection('saves');
 
-    // 取得前 10 名玩家 (以金錢排序)
     const leaderboard = await collection
       .find({})
       .sort({ 'gameData.money': -1 })
@@ -68,4 +64,4 @@ export default async function handler(req, res) {
     console.error('Leaderboard error:', error);
     res.status(500).json({ error: 'Failed to load leaderboard', details: error.message });
   }
-}
+};

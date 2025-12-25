@@ -1,4 +1,4 @@
-import { MongoClient } from 'mongodb';
+const { MongoClient } = require('mongodb');
 
 const MONGODB_URI = process.env.MONGODB_URI;
 const DB_NAME = 'betta_fish_game';
@@ -10,15 +10,12 @@ async function connectToDatabase() {
     return cachedClient;
   }
   
-  const client = await MongoClient.connect(MONGODB_URI, {
-    useNewUrlParser: true,
-    useUnifiedTopology: true,
-  });
+  const client = await MongoClient.connect(MONGODB_URI);
   cachedClient = client;
   return client;
 }
 
-export default async function handler(req, res) {
+module.exports = async function handler(req, res) {
   // 啟用 CORS
   res.setHeader('Access-Control-Allow-Credentials', true);
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -60,4 +57,4 @@ export default async function handler(req, res) {
     console.error('Load error:', error);
     res.status(500).json({ error: 'Failed to load game', details: error.message });
   }
-}
+};

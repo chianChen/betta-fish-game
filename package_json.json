@@ -2,7 +2,6 @@
   "name": "betta-fish-game",
   "version": "1.0.0",
   "description": "鬥魚養成遊戲",
-  "type": "module",
   "dependencies": {
     "mongodb": "^6.3.0"
   }
