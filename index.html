@@ -15,7 +15,6 @@
     <script type="text/babel">
         const { useState, useEffect } = React;
 
-        // Lucide Icons 替代方案（使用 emoji 或 SVG）
         const Heart = () => <span>❤️</span>;
         const Droplets = () => <span>💧</span>;
         const Thermometer = () => <span>🌡️</span>;
@@ -617,3 +616,11 @@
                   </div>
                 </div>
               )}
+            </div>
+          );
+        };
+
+        ReactDOM.render(<BettaFishGame />, document.getElementById('root'));
+    </script>
+</body>
+</html>
