@@ -13,7 +13,7 @@
     <div id="root"></div>
 
     <script type="text/babel">
-        const { useState, useEffect } = React;
+        const { useState, useEffect, useRef } = React;
 
         const Heart = () => <span>❤️</span>;
         const Droplets = () => <span>💧</span>;
@@ -23,6 +23,7 @@
         const Trophy = () => <span>🏆</span>;
         const DollarSign = () => <span>💰</span>;
         const Star = () => <span>⭐</span>;
+        const Fish = () => <span>🐟</span>;
 
         const BettaFishGame = () => {
           const [fishes, setFishes] = useState([]);
@@ -32,6 +33,7 @@
           const [waterQuality, setWaterQuality] = useState(100);
           const [temperature, setTemperature] = useState(26);
           const [money, setMoney] = useState(1000);
+          const [food, setFood] = useState(100);
           const [showSellMenu, setShowSellMenu] = useState(false);
           const [showContestMenu, setShowContestMenu] = useState(false);
           const [contestResult, setContestResult] = useState(null);
@@ -39,13 +41,12 @@
           const [saving, setSaving] = useState(false);
           const [showLeaderboard, setShowLeaderboard] = useState(false);
           const [leaderboard, setLeaderboard] = useState([]);
+          const lastIncomeTime = useRef(Date.now());
 
-          // API 基礎 URL (部署後要改成你的 Vercel URL)
           const API_URL = window.location.hostname === 'localhost' 
             ? 'http://localhost:3000/api' 
             : '/api';
 
-          // 初始化玩家 ID 和載入遊戲
           useEffect(() => {
             let id = localStorage.getItem('playerId');
             if (!id) {
@@ -56,7 +57,6 @@
             loadGame(id);
           }, []);
 
-          // 載入遊戲
           const loadGame = async (id) => {
             try {
               const response = await fetch(`${API_URL}/load-game?playerId=${id}`);
@@ -65,11 +65,11 @@
               if (data.success && data.gameData) {
                 setFishes(data.gameData.fishes || []);
                 setMoney(data.gameData.money || 1000);
+                setFood(data.gameData.food || 100);
                 setWaterQuality(data.gameData.waterQuality || 100);
                 setTemperature(data.gameData.temperature || 26);
                 console.log('遊戲載入成功！');
               } else {
-                // 新玩家，建立初始魚
                 const starter = createFish({
                   colorGenes: ['red', 'red'],
                   finGenes: ['halfmoon', 'veiltail'],
@@ -88,7 +88,6 @@
             }
           };
 
-          // 儲存遊戲
           const saveGame = async () => {
             if (!playerId || saving) return;
             
@@ -97,6 +96,7 @@
               const gameData = {
                 fishes,
                 money,
+                food,
                 waterQuality,
                 temperature
               };
@@ -123,15 +123,13 @@
             }
           };
 
-          // 自動儲存 (每 30 秒)
           useEffect(() => {
             const interval = setInterval(() => {
               saveGame();
             }, 30000);
             return () => clearInterval(interval);
-          }, [fishes, money, waterQuality, temperature, playerId]);
+          }, [fishes, money, food, waterQuality, temperature, playerId]);
 
-          // 載入排行榜
           const loadLeaderboard = async () => {
             try {
               const response = await fetch(`${API_URL}/leaderboard`);
@@ -145,6 +143,7 @@
             }
           };
 
+          // 水質下降
           useEffect(() => {
             const interval = setInterval(() => {
               setWaterQuality(prev => Math.max(0, prev - 0.5));
@@ -152,15 +151,72 @@
             return () => clearInterval(interval);
           }, []);
 
+          // 魚的飢餓度增加
           useEffect(() => {
             const interval = setInterval(() => {
-              if (fishes.length > 0) {
-                const income = fishes.length * 10;
-                setMoney(prev => prev + income);
-              }
-            }, 60000);
+              setFishes(prevFishes => 
+                prevFishes.map(fish => ({
+                  ...fish,
+                  hunger: Math.min(100, fish.hunger + 0.5)
+                }))
+              );
+            }, 2000);
             return () => clearInterval(interval);
-          }, [fishes]);
+          }, []);
+
+          // 魚的成長和收入系統
+          useEffect(() => {
+            const interval = setInterval(() => {
+              const now = Date.now();
+              const timePassed = (now - lastIncomeTime.current) / 1000; // 秒
+              
+              setFishes(prevFishes => 
+                prevFishes.map(fish => {
+                  let newAge = fish.age + timePassed;
+                  let newGrowthStage = fish.growthStage;
+                  
+                  // 成長階段判定
+                  if (newAge >= 300 && fish.growthStage === 'fry') {
+                    newGrowthStage = 'juvenile';
+                  } else if (newAge >= 600 && fish.growthStage === 'juvenile') {
+                    newGrowthStage = 'adult';
+                  }
+                  
+                  // 健康度影響
+                  let healthChange = 0;
+                  if (fish.hunger > 80) healthChange -= 0.5;
+                  if (fish.hunger < 30) healthChange += 0.2;
+                  if (waterQuality < 50) healthChange -= 0.3;
+                  
+                  return {
+                    ...fish,
+                    age: newAge,
+                    growthStage: newGrowthStage,
+                    health: Math.max(0, Math.min(100, fish.health + healthChange))
+                  };
+                })
+              );
+              
+              // 計算收入
+              if (fishes.length > 0) {
+                const totalIncome = fishes.reduce((sum, fish) => {
+                  const stageMultiplier = {
+                    fry: 0.5,
+                    juvenile: 1,
+                    adult: 2
+                  };
+                  return sum + (10 * (stageMultiplier[fish.growthStage] || 1));
+                }, 0);
+                
+                const incomePerSecond = totalIncome / 60;
+                setMoney(prev => prev + (incomePerSecond * timePassed));
+              }
+              
+              lastIncomeTime.current = now;
+            }, 1000);
+            
+            return () => clearInterval(interval);
+          }, [fishes, waterQuality]);
 
           const COLORS = {
             red: { primary: '#FF3B3B', secondary: '#CC0000', rarity: 1 },
@@ -178,6 +234,12 @@
             crowntail: { spread: 160, length: 1.0, rarity: 3 },
             plakat: { spread: 100, length: 0.6, rarity: 1 },
             delta: { spread: 140, length: 1.1, rarity: 2 }
+          };
+
+          const GROWTH_STAGES = {
+            fry: { name: '魚苗', sizeMultiplier: 0.5 },
+            juvenile: { name: '幼魚', sizeMultiplier: 0.8 },
+            adult: { name: '成魚', sizeMultiplier: 1.2 }
           };
 
           function createFish(genes = null) {
@@ -208,11 +270,12 @@
               id,
               genes,
               phenotype,
-              position: { x: Math.random() * 70 + 10, y: Math.random() * 60 + 20 },
-              velocity: { x: (Math.random() - 0.5) * 0.3, y: (Math.random() - 0.5) * 0.3 },
+              position: { x: Math.random() * 60 + 20, y: Math.random() * 50 + 25 },
+              velocity: { x: (Math.random() - 0.5) * 0.5, y: (Math.random() - 0.5) * 0.5 },
               health: 100,
               hunger: 50,
               age: 0,
+              growthStage: 'fry',
               contestWins: 0
             };
           }
@@ -235,10 +298,15 @@
             const finRarity = FIN_TYPES[fish.phenotype.finType]?.rarity || 1;
             const sizeBonus = fish.phenotype.size === 'large' ? 1.5 : 
                               fish.phenotype.size === 'small' ? 0.8 : 1;
+            const stageBonus = {
+              fry: 0.5,
+              juvenile: 1,
+              adult: 2
+            };
             const contestBonus = fish.contestWins * 100;
             
             const baseValue = 100;
-            return Math.floor(baseValue * colorRarity * finRarity * sizeBonus) + contestBonus;
+            return Math.floor(baseValue * colorRarity * finRarity * sizeBonus * stageBonus[fish.growthStage]) + contestBonus;
           }
 
           function calculateContestScore(fish) {
@@ -246,10 +314,12 @@
             const finRarity = FIN_TYPES[fish.phenotype.finType]?.rarity || 1;
             const sizeScore = fish.phenotype.size === 'large' ? 3 : 
                               fish.phenotype.size === 'medium' ? 2 : 1;
+            const stageBonus = fish.growthStage === 'adult' ? 1.5 : 
+                               fish.growthStage === 'juvenile' ? 1 : 0.5;
             const healthFactor = fish.health / 100;
             const randomFactor = 0.8 + Math.random() * 0.4;
             
-            return Math.floor((colorRarity * 20 + finRarity * 15 + sizeScore * 10) * healthFactor * randomFactor);
+            return Math.floor((colorRarity * 20 + finRarity * 15 + sizeScore * 10) * stageBonus * healthFactor * randomFactor);
           }
 
           function breedFish(parent1, parent2) {
@@ -271,6 +341,38 @@
             return createFish(childGenes);
           }
 
+          const feedFish = (fish) => {
+            if (food >= 10) {
+              setFishes(fishes.map(f => 
+                f.id === fish.id ? { 
+                  ...f, 
+                  hunger: Math.max(0, f.hunger - 30),
+                  health: Math.min(100, f.health + 5)
+                } : f
+              ));
+              setFood(food - 10);
+            }
+          };
+
+          const feedAllFish = () => {
+            const cost = fishes.length * 10;
+            if (food >= cost) {
+              setFishes(fishes.map(f => ({
+                ...f,
+                hunger: Math.max(0, f.hunger - 30),
+                health: Math.min(100, f.health + 5)
+              })));
+              setFood(food - cost);
+            }
+          };
+
+          const buyFood = () => {
+            if (money >= 50) {
+              setFood(food + 100);
+              setMoney(money - 50);
+            }
+          };
+
           const sellFish = (fish) => {
             const value = calculateFishValue(fish);
             setFishes(fishes.filter(f => f.id !== fish.id));
@@ -284,6 +386,10 @@
             const prizes = { bronze: [200, 100, 50], silver: [600, 300, 150], gold: [1200, 600, 300] };
             
             if (money < entryFees[contestLevel]) return;
+            if (fish.growthStage === 'fry') {
+              alert('魚苗太小了，無法參加比賽！');
+              return;
+            }
             
             setMoney(money - entryFees[contestLevel]);
             
@@ -317,6 +423,7 @@
             setShowContestMenu(false);
           };
 
+          // 魚的移動
           useEffect(() => {
             const interval = setInterval(() => {
               setFishes(prevFishes => 
@@ -327,12 +434,17 @@
                   x += vx;
                   y += vy;
 
-                  if (x <= 5 || x >= 90) vx *= -1;
-                  if (y <= 15 || y >= 80) vy *= -1;
+                  // 邊界碰撞 - 使用百分比座標
+                  if (x <= 10 || x >= 90) vx *= -1;
+                  if (y <= 20 || y >= 80) vy *= -1;
 
+                  // 隨機改變方向
                   if (Math.random() < 0.02) {
-                    vx += (Math.random() - 0.5) * 0.2;
-                    vy += (Math.random() - 0.5) * 0.2;
+                    vx += (Math.random() - 0.5) * 0.3;
+                    vy += (Math.random() - 0.5) * 0.3;
+                    // 限制速度
+                    vx = Math.max(-1, Math.min(1, vx));
+                    vy = Math.max(-1, Math.min(1, vy));
                   }
 
                   return {
@@ -350,6 +462,10 @@
           const handleFishClick = (fish) => {
             if (breedingMode) {
               if (breedingPair.length < 2 && !breedingPair.includes(fish.id)) {
+                if (fish.growthStage === 'fry') {
+                  alert('魚苗無法配對！');
+                  return;
+                }
                 const newPair = [...breedingPair, fish.id];
                 setBreedingPair(newPair);
                 
@@ -392,9 +508,10 @@
           const renderFish = (fish) => {
             const color = COLORS[fish.phenotype.color];
             const finType = FIN_TYPES[fish.phenotype.finType];
-            const sizeMultiplier = fish.phenotype.size === 'large' ? 1.3 : 
+            const phenotypeSize = fish.phenotype.size === 'large' ? 1.3 : 
                                   fish.phenotype.size === 'small' ? 0.8 : 1;
-            const baseSize = 30 * sizeMultiplier;
+            const growthSize = GROWTH_STAGES[fish.growthStage].sizeMultiplier;
+            const baseSize = 30 * phenotypeSize * growthSize;
             const isSelected = breedingPair.includes(fish.id);
 
             return (
@@ -413,6 +530,11 @@
                 
                 {fish.contestWins > 0 && (
                   <text x={baseSize * 0.5} y={-baseSize * 0.5} fontSize="12" fill="#FFD700">★{fish.contestWins}</text>
+                )}
+                
+                {/* 飢餓指示器 */}
+                {fish.hunger > 70 && (
+                  <text x={-baseSize * 0.5} y={-baseSize * 0.6} fontSize="14">😟</text>
                 )}
                 
                 <path
@@ -444,6 +566,17 @@
             );
           };
 
+          const getTotalIncome = () => {
+            return fishes.reduce((sum, fish) => {
+              const stageMultiplier = {
+                fry: 0.5,
+                juvenile: 1,
+                adult: 2
+              };
+              return sum + (10 * (stageMultiplier[fish.growthStage] || 1));
+            }, 0);
+          };
+
           return (
             <div className="w-full h-screen bg-gradient-to-b from-blue-100 to-blue-200 p-4">
               <div className="bg-white rounded-lg shadow-lg p-4 mb-4 flex justify-between items-center flex-wrap gap-2">
@@ -468,15 +601,33 @@
                   
                   <div className="flex items-center gap-2">
                     <DollarSign />
-                    <span className="font-bold text-sm">${money}</span>
+                    <span className="font-bold text-sm">${money.toFixed(0)}</span>
+                  </div>
+                  
+                  <div className="flex items-center gap-2">
+                    <Fish />
+                    <span className="text-sm">飼料: {food.toFixed(0)}</span>
+                    <button
+                      onClick={buyFood}
+                      className="px-2 py-1 bg-green-500 text-white rounded text-xs hover:bg-green-600"
+                    >
+                      買飼料 ($50)
+                    </button>
                   </div>
                   
                   <div className="text-xs text-gray-600">
-                    魚數: {fishes.length} | 收入: ${fishes.length * 10}/分
+                    魚數: {fishes.length} | 收入: ${getTotalIncome().toFixed(1)}/分
                   </div>
                 </div>
 
                 <div className="flex gap-2 flex-wrap">
+                  <button
+                    onClick={feedAllFish}
+                    className="flex items-center gap-1 px-3 py-1 bg-orange-500 text-white rounded hover:bg-orange-600 text-sm"
+                  >
+                    🍽️ 餵食全部
+                  </button>
+                  
                   <button
                     onClick={() => {
                       setBreedingMode(!breedingMode);
@@ -533,7 +684,7 @@
 
               <div className="bg-gradient-to-b from-cyan-200 to-blue-400 rounded-lg shadow-2xl p-4 relative" 
                    style={{ height: 'calc(100vh - 180px)' }}>
-                <svg width="100%" height="100%" className="rounded-lg">
+                <svg width="100%" height="100%" className="rounded-lg" viewBox="0 0 100 100" preserveAspectRatio="none">
                   <defs>
                     <linearGradient id="waterGrad" x1="0%" y1="0%" x2="0%" y2="100%">
                       <stop offset="0%" style={{ stopColor: 'rgba(100,200,255,0.3)', stopOpacity: 1 }} />
@@ -541,18 +692,18 @@
                     </linearGradient>
                   </defs>
                   
-                  <rect width="100%" height="100%" fill="url(#waterGrad)" />
+                  <rect width="100" height="100" fill="url(#waterGrad)" />
                   
-                  <ellipse cx="20%" cy="95%" rx="15%" ry="5%" fill="#8B7355" opacity="0.6" />
-                  <ellipse cx="60%" cy="95%" rx="20%" ry="5%" fill="#8B7355" opacity="0.6" />
-                  <ellipse cx="85%" cy="95%" rx="12%" ry="5%" fill="#8B7355" opacity="0.6" />
+                  <ellipse cx="20" cy="95" rx="15" ry="3" fill="#8B7355" opacity="0.6" />
+                  <ellipse cx="60" cy="95" rx="20" ry="3" fill="#8B7355" opacity="0.6" />
+                  <ellipse cx="85" cy="95" rx="12" ry="3" fill="#8B7355" opacity="0.6" />
                   
                   {fishes.map(renderFish)}
                 </svg>
 
                 {breedingMode && (
                   <div className="absolute top-4 left-1/2 transform -translate-x-1/2 bg-pink-500 text-white px-4 py-2 rounded-lg shadow-lg text-sm">
-                    選擇兩條魚進行配對 ({breedingPair.length}/2)
+                    選擇兩條魚進行配對 ({breedingPair.length}/2) - 需成年魚
                   </div>
                 )}
               </div>
@@ -573,7 +724,12 @@
                           <div className="flex justify-between items-start mb-2">
                             <div>
                               <div className="font-semibold text-sm">{fish.phenotype.color} {fish.phenotype.finType}</div>
-                              <div className="text-xs text-gray-600">體型: {fish.phenotype.size}</div>
+                              <div className="text-xs text-gray-600">
+                                體型: {fish.phenotype.size} | {GROWTH_STAGES[fish.growthStage].name}
+                              </div>
+                              <div className="text-xs text-gray-600">
+                                年齡: {Math.floor(fish.age)}秒 | 健康: {fish.health.toFixed(0)}%
+                              </div>
                               {fish.contestWins > 0 && (
                                 <div className="text-xs text-yellow-600 flex items-center gap-1">
                                   <Star /> 冠軍 x{fish.contestWins}
@@ -613,34 +769,42 @@
                       <div><strong>銅牌賽</strong>: $100 | 獎金 $200/$100/$50</div>
                       <div><strong>銀牌賽</strong>: $300 | 獎金 $600/$300/$150</div>
                       <div><strong>金牌賽</strong>: $500 | 獎金 $1200/$600/$300</div>
+                      <div className="text-red-600">* 魚苗無法參加比賽</div>
                     </div>
                     
                     <div className="space-y-3">
                       {fishes.map(fish => (
                         <div key={fish.id} className="border rounded p-3">
                           <div className="mb-2">
-                            <div className="font-semibold text-sm">{fish.phenotype.color} {fish.phenotype.finType}</div>
-                            <div className="text-xs text-gray-600">體型: {fish.phenotype.size} | 預估分數: ~{calculateContestScore(fish)}</div>
+                            <div className="font-semibold text-sm">
+                              {fish.phenotype.color} {fish.phenotype.finType} ({GROWTH_STAGES[fish.growthStage].name})
+                            </div>
+                            <div className="text-xs text-gray-600">
+                              體型: {fish.phenotype.size} | 預估分數: ~{calculateContestScore(fish)}
+                            </div>
+                            <div className="text-xs text-gray-600">
+                              健康: {fish.health.toFixed(0)}% | 飢餓: {fish.hunger.toFixed(0)}%
+                            </div>
                           </div>
                           <div className="flex gap-2">
                             <button
                               onClick={() => enterContest(fish, 'bronze')}
-                              className="flex-1 px-2 py-1 bg-orange-400 text-white rounded hover:bg-orange-500 text-xs"
-                              disabled={money < 100}
+                              className="flex-1 px-2 py-1 bg-orange-400 text-white rounded hover:bg-orange-500 text-xs disabled:opacity-50"
+                              disabled={money < 100 || fish.growthStage === 'fry'}
                             >
                               銅牌
                             </button>
                             <button
                               onClick={() => enterContest(fish, 'silver')}
-                              className="flex-1 px-2 py-1 bg-gray-400 text-white rounded hover:bg-gray-500 text-xs"
-                              disabled={money < 300}
+                              className="flex-1 px-2 py-1 bg-gray-400 text-white rounded hover:bg-gray-500 text-xs disabled:opacity-50"
+                              disabled={money < 300 || fish.growthStage === 'fry'}
                             >
                               銀牌
                             </button>
                             <button
                               onClick={() => enterContest(fish, 'gold')}
-                              className="flex-1 px-2 py-1 bg-yellow-400 text-white rounded hover:bg-yellow-500 text-xs"
-                              disabled={money < 500}
+                              className="flex-1 px-2 py-1 bg-yellow-400 text-white rounded hover:bg-yellow-500 text-xs disabled:opacity-50"
+                              disabled={money < 500 || fish.growthStage === 'fry'}
                             >
                               金牌
                             </button>
@@ -753,6 +917,26 @@
                       <span className="font-semibold">{selectedFish.phenotype.size}</span>
                     </div>
                     <div className="flex justify-between">
+                      <span>成長階段:</span>
+                      <span className="font-semibold">{GROWTH_STAGES[selectedFish.growthStage].name}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>年齡:</span>
+                      <span className="font-semibold">{Math.floor(selectedFish.age)} 秒</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>健康度:</span>
+                      <span className={`font-semibold ${selectedFish.health > 70 ? 'text-green-600' : selectedFish.health > 40 ? 'text-yellow-600' : 'text-red-600'}`}>
+                        {selectedFish.health.toFixed(0)}%
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>飢餓度:</span>
+                      <span className={`font-semibold ${selectedFish.hunger < 30 ? 'text-green-600' : selectedFish.hunger < 70 ? 'text-yellow-600' : 'text-red-600'}`}>
+                        {selectedFish.hunger.toFixed(0)}%
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
                       <span>市場價值:</span>
                       <span className="font-bold text-green-600">${calculateFishValue(selectedFish)}</span>
                     </div>
@@ -760,6 +944,14 @@
                       <span>比賽勝場:</span>
                       <span className="font-semibold">{selectedFish.contestWins}</span>
                     </div>
+                    
+                    <button
+                      onClick={() => feedFish(selectedFish)}
+                      disabled={food < 10}
+                      className="w-full mt-3 px-4 py-2 bg-orange-500 text-white rounded hover:bg-orange-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      餵食 (10 飼料)
+                    </button>
                     
                     <div className="mt-3 pt-3 border-t">
                       <div className="text-xs text-gray-600">基因型:</div>
@@ -772,6 +964,13 @@
                       <div className="text-xs">
                         體型: {selectedFish.genes.sizeGenes.join(' / ')}
                       </div>
+                    </div>
+                    
+                    <div className="mt-2 pt-2 border-t text-xs text-gray-600">
+                      <div>💡 提示:</div>
+                      <div>• 魚苗 (0-300秒) → 幼魚 (300-600秒) → 成魚 (600秒+)</div>
+                      <div>• 飢餓度高會降低健康</div>
+                      <div>• 成魚收入是魚苗的4倍</div>
                     </div>
                   </div>
                 </div>
