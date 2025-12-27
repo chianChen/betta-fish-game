@@ -48,6 +48,21 @@ module.exports = async function handler(req, res) {
       return res.status(404).json({ error: 'Save not found' });
     }
 
+    // 確保舊存檔也有 food 欄位
+    if (!save.gameData.food) {
+      save.gameData.food = 100;
+    }
+
+    // 確保所有魚都有新的屬性
+    if (save.gameData.fishes && save.gameData.fishes.length > 0) {
+      save.gameData.fishes = save.gameData.fishes.map(fish => ({
+        ...fish,
+        age: fish.age || 0,
+        growthStage: fish.growthStage || 'fry',
+        hunger: fish.hunger !== undefined ? fish.hunger : 50
+      }));
+    }
+
     res.status(200).json({ 
       success: true,
       gameData: save.gameData,

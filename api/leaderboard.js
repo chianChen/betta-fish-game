@@ -44,17 +44,26 @@ module.exports = async function handler(req, res) {
         playerId: 1, 
         'gameData.money': 1,
         'gameData.fishes': 1,
+        'gameData.food': 1,
         lastUpdated: 1 
       })
       .toArray();
 
-    const formattedLeaderboard = leaderboard.map((entry, index) => ({
-      rank: index + 1,
-      playerId: entry.playerId,
-      money: entry.gameData?.money || 0,
-      fishCount: entry.gameData?.fishes?.length || 0,
-      lastUpdated: entry.lastUpdated
-    }));
+    const formattedLeaderboard = leaderboard.map((entry, index) => {
+      // 計算成魚數量
+      const adultCount = entry.gameData?.fishes?.filter(f => f.growthStage === 'adult').length || 0;
+      const totalFish = entry.gameData?.fishes?.length || 0;
+      
+      return {
+        rank: index + 1,
+        playerId: entry.playerId,
+        money: Math.floor(entry.gameData?.money || 0),
+        fishCount: totalFish,
+        adultCount: adultCount,
+        food: entry.gameData?.food || 0,
+        lastUpdated: entry.lastUpdated
+      };
+    });
 
     res.status(200).json({ 
       success: true,
