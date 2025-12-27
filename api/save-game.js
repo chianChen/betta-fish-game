@@ -38,6 +38,15 @@ module.exports = async function handler(req, res) {
       return res.status(400).json({ error: 'Missing playerId or gameData' });
     }
 
+    // 驗證 gameData 結構
+    const validatedGameData = {
+      fishes: gameData.fishes || [],
+      money: gameData.money || 1000,
+      food: gameData.food || 100, // 新增飼料欄位
+      waterQuality: gameData.waterQuality || 100,
+      temperature: gameData.temperature || 26
+    };
+
     const client = await connectToDatabase();
     const db = client.db(DB_NAME);
     const collection = db.collection('saves');
@@ -46,7 +55,7 @@ module.exports = async function handler(req, res) {
       { playerId },
       { 
         $set: { 
-          gameData,
+          gameData: validatedGameData,
           lastUpdated: new Date()
         } 
       },
